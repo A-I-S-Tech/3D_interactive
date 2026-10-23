@@ -1,0 +1,1150 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head>
+<body>
+<title>Sistema Reprodutor no Ar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: palco em tela cheia. Câmera espelhada ao fundo, corte da pelve masculina em 3D no centro,
+   HUD de vidro: marca e gestos no alto à esquerda, "o que a IA vê" e o trajeto (sêmen/urina) à direita,
+   cartão da parte apontada e botões embaixo. */
+:root{
+  --stage-1:#1a1636;
+  --stage-2:#06050d;
+  --ink:#f6f1ff;
+  --ink-dim:rgba(246,241,255,.66);
+  --glass:rgba(14,12,30,.6);
+  --glass-hi:rgba(255,255,255,.16);
+  --line:rgba(255,255,255,.15);
+  --accent:#ffd23f;
+  --accent-ink:#1d1604;
+  --signal:#bff3ff;
+  --urine:#ffe14a;
+  --ok:#5be38f;
+  --f-display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --gx:max(20px, env(safe-area-inset-left,0px) + 16px);
+  --gxr:max(20px, env(safe-area-inset-right,0px) + 16px);
+  --gt:calc(env(safe-area-inset-top,0px) + 18px);
+  --gb:calc(env(safe-area-inset-bottom,0px) + 18px);
+  color-scheme:dark;
+}
+html,body{height:100%}
+[hidden]{display:none!important}
+body{
+  margin:0;overflow:hidden;color:var(--ink);font-family:var(--f-display);
+  background:radial-gradient(120% 95% at 50% 45%, var(--stage-1) 0%, var(--stage-2) 72%);
+  background-color:var(--stage-2);
+  padding-left:max(16px, env(safe-area-inset-left,0px));
+  padding-right:max(16px, env(safe-area-inset-right,0px));
+  -webkit-font-smoothing:antialiased;
+  -webkit-user-select:none;user-select:none;
+}
+.layer{position:fixed;inset:0;width:100%;height:100%;display:block}
+#cam{object-fit:cover;transform:scaleX(-1);filter:brightness(.55) saturate(.8) contrast(1.05);opacity:0;transition:opacity .7s ease}
+body.cam-on #cam{opacity:1}
+body.ai-view #cam{opacity:0}
+.vignette{pointer-events:none;background:radial-gradient(80% 75% at 50% 50%, transparent 55%, rgba(0,0,0,.55) 100%)}
+#gl{touch-action:none;cursor:grab}
+#gl.dragging{cursor:grabbing}
+#overlay{pointer-events:none;z-index:6}
+#tags{pointer-events:none;z-index:7;overflow:hidden}
+
+.hud{position:fixed;z-index:8;pointer-events:none}
+.glass{background:var(--glass);border:1px solid var(--line);border-radius:14px;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+
+/* Marca + gestos */
+.brand{top:var(--gt);left:var(--gx);max-width:min(400px, 36vw);display:grid;gap:14px}
+.brand h1{margin:0;font-size:clamp(28px,3.8vw,54px);font-weight:800;line-height:.92;letter-spacing:-.025em;text-wrap:balance}
+.brand h1 em{font-style:normal;color:var(--accent)}
+.brand h1 small{display:block;margin-top:8px;font:500 12px var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim)}
+.hints{display:grid;gap:10px;padding:12px 14px;font-size:clamp(13px,1.05vw,15px);line-height:1.35}
+.hint{display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:center}
+.hint svg{width:30px;height:30px}
+.hint b{font-weight:700}
+.hint span{color:var(--ink-dim)}
+.howto{padding:14px 16px;font-size:14px;line-height:1.45}
+.howto h3{margin:0 0 8px;font-size:17px;font-weight:800}
+.howto ol{margin:0;padding-left:1.2em;display:grid;gap:6px}
+.howto li::marker{color:var(--accent);font-weight:700}
+.howto p{margin:10px 0 0;font:400 11.5px/1.5 var(--f-mono);color:var(--ink-dim)}
+#chip{display:none;justify-self:start;padding:6px 12px;font:500 12px var(--f-mono);border-radius:999px}
+
+/* Painel da IA */
+.vision{top:var(--gt);right:var(--gxr);width:min(270px, 40vw);padding:12px 14px;font-family:var(--f-mono);font-size:12px;display:grid;gap:6px}
+.panel-title{margin:0 0 3px;font:500 10.5px var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:#77738a;flex:none}
+.dot.live{background:var(--ok);animation:pulse 1.8s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(91,227,143,.55)}100%{box-shadow:0 0 0 9px rgba(91,227,143,0)}}
+.row{display:flex;justify-content:space-between;gap:12px;font-variant-numeric:tabular-nums}
+.row span{color:var(--ink-dim)}
+.row b{font-weight:500;text-align:right}
+
+/* Trajeto */
+.route{top:calc(var(--gt) + 186px);right:var(--gxr);width:min(270px, 40vw);padding:12px 12px 10px;display:grid;gap:8px}
+.route-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:0 2px}
+.route-head .panel-title{margin:0}
+#routeCount{font:500 11px var(--f-mono);color:var(--ink-dim);font-variant-numeric:tabular-nums}
+#routeName{font-size:20px;font-weight:800;letter-spacing:-.01em;line-height:1.1;padding:0 2px;transition:color .3s}
+.route[data-kind="sperm"] #routeName{color:var(--signal)}
+.route[data-kind="urine"] #routeName{color:var(--urine)}
+#steps{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+#steps li{display:grid;grid-template-columns:22px 1fr;gap:9px;align-items:start;padding:5px 6px;border-radius:9px;font-size:13.5px;line-height:1.25;color:var(--ink-dim);transition:background .25s,color .25s}
+#steps li i{width:20px;height:20px;border-radius:50%;border:1px solid rgba(255,255,255,.25);display:grid;place-items:center;font:500 10.5px var(--f-mono);font-style:normal;margin-top:-1px;transition:background .25s,color .25s,border-color .25s}
+#steps li b{font-weight:700}
+#steps li span{display:none;font:400 11.5px/1.4 var(--f-mono);color:var(--ink-dim);margin-top:2px}
+#steps li[data-s="now"]{background:rgba(255,210,63,.14);color:var(--ink)}
+#steps li[data-s="now"] i{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+#steps li[data-s="now"] span{display:block}
+#steps li[data-s="done"]{color:var(--ink)}
+#steps li[data-s="done"] i{background:rgba(91,227,143,.18);border-color:rgba(91,227,143,.6);color:var(--ok)}
+
+/* Rodapé: cartão da parte + botões */
+.dock{left:var(--gx);right:var(--gxr);bottom:var(--gb);display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.info{padding:12px 16px;width:min(430px, 100%);display:grid;gap:3px;transition:border-color .2s}
+.info .eyebrow{font:500 10.5px var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim)}
+.info strong{font-size:22px;font-weight:800;letter-spacing:-.01em;transition:color .2s}
+.info p{margin:0;font-size:14px;line-height:1.4;color:var(--ink-dim);max-width:52ch}
+.info.active{border-color:rgba(255,210,63,.55)}
+.info.active strong{color:var(--accent)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;pointer-events:auto;max-width:760px}
+.btn{font:700 15px var(--f-display);color:var(--ink);background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:0 18px;min-height:54px;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);cursor:pointer;transition:transform .15s ease, background .15s ease, border-color .15s ease;display:inline-flex;align-items:center;gap:8px}
+.btn:hover,.btn.hand-hover{background:var(--glass-hi);border-color:rgba(255,255,255,.4);transform:translateY(-2px)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.primary:hover,.btn.primary.hand-hover{background:#ffe066}
+.btn.urine{border-color:rgba(255,225,74,.55)}
+.btn[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.btn.pressed{transform:scale(.93)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.btn .sw{width:10px;height:10px;border-radius:50%;flex:none}
+
+/* Nomes das partes */
+.tag{position:absolute;left:0;top:0;padding:4px 10px;border-radius:999px;background:rgba(10,9,24,.72);border:1px solid var(--line);font:700 13px var(--f-display);white-space:nowrap;color:var(--ink);transition:color .2s,border-color .2s;will-change:transform}
+.tag.on{color:var(--accent);border-color:var(--accent)}
+
+#attract{position:fixed;left:50%;bottom:max(19vh,150px);transform:translate(-50%,8px);text-align:center;opacity:0;transition:opacity .7s ease, transform .7s ease;pointer-events:none;z-index:8;width:min(90vw,660px)}
+body.idle #attract{opacity:1;transform:translate(-50%,0)}
+#attract strong{display:block;font-size:clamp(22px,2.8vw,38px);font-weight:800;letter-spacing:-.015em;text-shadow:0 2px 24px rgba(0,0,0,.7)}
+#attract small{display:block;margin-top:6px;font:400 13px var(--f-mono);color:var(--ink-dim)}
+
+#toast{position:fixed;top:var(--gt);left:50%;transform:translate(-50%,-12px);opacity:0;transition:opacity .35s ease, transform .35s ease;z-index:9;padding:12px 16px;font-size:14px;line-height:1.4;max-width:min(520px, calc(100vw - 40px));text-align:center;pointer-events:none}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media (max-width:1100px){ .tag.minor{display:none} }
+@media (max-width:820px){
+  .brand{max-width:calc(100vw - 40px)}
+  .vision,.route,.hints,.howto{display:none!important}
+  body.flowing #chip{display:block}
+  .info strong{font-size:18px}
+  .info p{font-size:13px}
+  .btn{min-height:44px;padding:0 13px;font-size:14px}
+  .tag{font-size:11.5px;padding:3px 8px}
+}
+@media (prefers-reduced-motion:reduce){
+  .dot.live{animation:none}
+  .btn,#attract,#toast{transition:none}
+}
+</style>
+
+<video id="cam" class="layer" playsinline muted></video>
+<div class="layer vignette"></div>
+<canvas id="gl" class="layer" aria-label="Corte 3D da pelve masculina. Arraste para girar, use a roda do mouse para ampliar e clique numa parte para ver o trajeto."></canvas>
+<canvas id="overlay" class="layer"></canvas>
+<div id="tags" class="layer" aria-hidden="true"></div>
+
+<header class="hud brand">
+  <h1>Sistema Reprodutor <em>no Ar</em><small>Masculino · pelve em 3D</small></h1>
+  <div id="chip" class="glass"></div>
+  <div class="hints glass" id="hints">
+    <div class="hint">
+      <svg viewBox="0 0 30 30" aria-hidden="true"><path d="M6 15a9 9 0 0 1 16-5.6M24 15a9 9 0 0 1-16 5.6" fill="none" stroke="#f6f1ff" stroke-width="2" stroke-linecap="round"/><path d="M22.5 4.5v5h-5M7.5 25.5v-5h5" fill="none" stroke="#f6f1ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div><b>Pinça e arraste</b> <span>gira o modelo. Pinça é o polegar encostando no indicador.</span></div>
+    </div>
+    <div class="hint">
+      <svg viewBox="0 0 30 30" aria-hidden="true"><circle cx="8" cy="15" r="5" fill="#ffd23f"/><circle cx="22" cy="15" r="5" fill="#ffd23f"/><path d="M1.5 15h1.5M27 15h1.5" stroke="#f6f1ff" stroke-width="2" stroke-linecap="round"/></svg>
+      <div><b>Pinça com as duas mãos</b> <span>afaste para ampliar, aproxime para reduzir.</span></div>
+    </div>
+    <div class="hint">
+      <svg viewBox="0 0 30 30" aria-hidden="true"><path d="M4 22c5-1 6-9 11-9s6 8 11 7" fill="none" stroke="#bff3ff" stroke-width="2.4" stroke-linecap="round"/><circle cx="15" cy="13" r="3.4" fill="#ffd23f"/></svg>
+      <div><b>Pinça rápida numa parte</b> <span>mostra o trajeto dos espermatozoides ou da urina.</span></div>
+    </div>
+  </div>
+  <section class="howto glass" id="howto" hidden>
+    <h3>Como a máquina vê sua mão</h3>
+    <ol>
+      <li>A câmera manda cerca de 30 imagens por segundo para uma rede neural artificial.</li>
+      <li>Ela devolve 21 pontos por mão: pulso, juntas e pontas dos dedos.</li>
+      <li>Polegar perto do indicador vira "pinça". Arrastar a pinça gira o modelo.</li>
+      <li>A distância entre duas pinças vira zoom.</li>
+    </ol>
+    <p>Uma rede neural artificial usando a câmera para mostrar a anatomia do corpo humano. Nada é gravado: as imagens são analisadas neste computador e descartadas.</p>
+  </section>
+</header>
+
+<aside class="hud vision glass" aria-live="polite">
+  <h2 class="panel-title"><i class="dot" id="vDot"></i>O que a IA vê</h2>
+  <div class="row"><span>Câmera</span><b id="vCam">iniciando…</b></div>
+  <div class="row"><span>Rede neural</span><b id="vModel">aguardando</b></div>
+  <div class="row"><span>Mãos</span><b id="vHands">0</b></div>
+  <div class="row"><span>Pontos rastreados</span><b id="vPts">0</b></div>
+  <div class="row"><span>Gesto</span><b id="vGesture">–</b></div>
+  <div class="row"><span>Leituras por segundo</span><b id="vFps">–</b></div>
+</aside>
+
+<section class="hud route glass" id="route" data-kind="sperm" aria-label="Trajeto">
+  <div class="route-head"><h2 class="panel-title">Trajeto</h2><span id="routeCount">–</span></div>
+  <div id="routeName">Espermatozoides</div>
+  <ol id="steps"></ol>
+</section>
+
+<div id="attract" aria-hidden="true">
+  <strong id="attractTitle">Levante a mão e faça uma pinça para girar</strong>
+  <small id="attractSub">pinça rápida numa parte = ver o trajeto</small>
+</div>
+
+<footer class="hud dock">
+  <div class="info glass" id="info" aria-live="polite">
+    <span class="eyebrow">Sistema reprodutor masculino</span>
+    <strong id="iName">Aponte para uma parte</strong>
+    <p id="iDesc">Passe a mão ou o mouse sobre o modelo para ver o nome e a função de cada estrutura.</p>
+  </div>
+  <div class="actions">
+    <button class="btn" id="camBtn" type="button" hidden>Ligar câmera</button>
+    <button class="btn primary" id="spermBtn" type="button">Espermatozoides</button>
+    <button class="btn urine" id="urineBtn" type="button"><i class="sw" style="background:var(--urine)"></i>Urina</button>
+    <button class="btn" id="cutBtn" type="button" aria-pressed="false">Corte</button>
+    <button class="btn" id="tagBtn" type="button" aria-pressed="true">Nomes</button>
+    <button class="btn" id="aiBtn" type="button" aria-pressed="false">Visão da IA</button>
+    <button class="btn" id="howBtn" type="button" aria-pressed="false">Como funciona</button>
+    <button class="btn" id="fsBtn" type="button">Tela cheia</button>
+  </div>
+</footer>
+
+<div id="toast" class="glass" role="status"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script type="module">
+const THREE = window.THREE;
+const $ = s => document.querySelector(s);
+const MP_VER = "0.10.14";
+const MP_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VER}`;
+const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+const NS = 10; // faíscas simultâneas no shader
+
+const PARTS = {
+  bexiga:       { name: "Bexiga urinária", desc: "Bolsa de músculo que guarda a urina. Num adulto cabe de 400 a 600 mL." },
+  ureter:       { name: "Ureteres", desc: "Tubos que trazem a urina dos rins até a bexiga, empurrada por ondas de contração." },
+  uretra:       { name: "Uretra", desc: "Canal de uns 20 cm que leva para fora a urina e também o sêmen. Tem três partes: prostática, membranosa e esponjosa." },
+  prostata:     { name: "Próstata", desc: "Glândula do tamanho de uma noz que abraça a uretra. Produz cerca de 30% do líquido do sêmen." },
+  seminal:      { name: "Glândulas seminais", desc: "Produzem 60 a 70% do sêmen: um líquido rico em frutose, a energia dos espermatozoides." },
+  deferente:    { name: "Ducto deferente", desc: "Tubo muscular de uns 45 cm. Sobe do escroto, entra na pelve e leva os espermatozoides até a uretra." },
+  ampola:       { name: "Ampola do ducto deferente", desc: "Trecho final e mais largo do ducto deferente. Ali ele encontra o ducto da glândula seminal." },
+  ejaculatorio: { name: "Ductos ejaculatórios", desc: "Nascem da união do ducto deferente com a glândula seminal, atravessam a próstata e abrem na uretra." },
+  bulbouretral: { name: "Glândulas bulbouretrais", desc: "Do tamanho de uma ervilha. Soltam um muco que lubrifica e neutraliza a acidez da uretra." },
+  cavernoso:    { name: "Corpos cavernosos", desc: "Dois cilindros de tecido esponjoso que se enchem de sangue e causam a ereção." },
+  esponjoso:    { name: "Corpo esponjoso", desc: "Envolve e protege a uretra. Na base forma o bulbo do pênis e, na ponta, a glande." },
+  glande:       { name: "Glande do pênis", desc: "Ponta do pênis, muito sensível. Nela fica o óstio externo da uretra, a saída." },
+  testiculo:    { name: "Testículos", desc: "Produzem milhões de espermatozoides por dia e o hormônio testosterona." },
+  epididimo:    { name: "Epidídimo", desc: "Tubo enrolado de cerca de 6 m sobre o testículo. Os espermatozoides amadurecem aqui por umas 2 semanas." },
+  escroto:      { name: "Escroto", desc: "Bolsa de pele que mantém os testículos 2 a 3 °C abaixo da temperatura do corpo." },
+  funiculo:     { name: "Funículo espermático", desc: "Cordão que liga o testículo ao abdome. Leva o ducto deferente, a artéria, as veias e os nervos." },
+  arteria:      { name: "Artéria testicular", desc: "Leva sangue rico em oxigênio do abdome até o testículo." },
+  plexo:        { name: "Plexo venoso pampiniforme", desc: "Rede de veias que envolve a artéria e esfria o sangue que chega ao testículo." },
+  esfincter:    { name: "Esfíncter externo da uretra", desc: "Músculo que controlamos por vontade própria para segurar ou soltar a urina." },
+  reto:         { name: "Reto e ânus", desc: "Final do intestino. Fica logo atrás da próstata, por isso o médico consegue examiná-la pelo toque retal." },
+  pube:         { name: "Sínfise púbica", desc: "União dos dois ossos do quadril, na frente. Protege a bexiga." }
+};
+
+const STAGES = {
+  sperm: { name: "Espermatozoides", color: 0xe9f9ff, steps: [
+    ["Testículo", "Os espermatozoides são produzidos nos túbulos seminíferos."],
+    ["Epidídimo", "Amadurecem e aprendem a nadar durante umas 2 semanas."],
+    ["Ducto deferente", "Sobem pelo funículo, entram na pelve e contornam a bexiga."],
+    ["Glândula seminal", "Na ampola recebem o líquido seminal, rico em frutose."],
+    ["Próstata", "Pelo ducto ejaculatório entram na uretra e ganham o líquido prostático."],
+    ["Glândula bulbouretral", "Um muco limpa e lubrifica o caminho."],
+    ["Uretra esponjosa", "O sêmen sai pelo óstio externo, na glande."]
+  ]},
+  urine: { name: "Urina", color: 0xffe14a, steps: [
+    ["Ureteres", "Trazem a urina produzida nos rins."],
+    ["Bexiga", "Guarda a urina e se estica conforme enche."],
+    ["Óstio interno", "O esfíncter interno relaxa e abre a saída da bexiga."],
+    ["Uretra prostática", "A urina atravessa a próstata."],
+    ["Esfíncter externo", "O músculo que controlamos libera a passagem."],
+    ["Uretra esponjosa", "A urina sai pelo óstio externo, na glande."]
+  ]}
+};
+
+const video = $("#cam"), glCanvas = $("#gl"), ov = $("#overlay"), octx = ov.getContext("2d");
+let W = innerWidth, H = innerHeight, DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+/* ---------- Cena ---------- */
+const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: true });
+renderer.setPixelRatio(DPR); renderer.setClearColor(0x000000, 0);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, W / H, 0.1, 400);
+const pivot = new THREE.Group(); scene.add(pivot);
+const inner = new THREE.Group(); pivot.add(inner);
+pivot.quaternion.setFromEuler(new THREE.Euler(0.12, 0.5, 0.0));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rnd = mulberry32(2210);
+const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const randUnit = (rf = rnd) => { let v; do { v = V3(rf() * 2 - 1, rf() * 2 - 1, rf() * 2 - 1); } while (v.lengthSq() > 1 || v.lengthSq() < 1e-3); return v.normalize(); };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const SIDES = [1, -1];
+
+/* ---------- Material de tecido (brilho de atlas + luz das faíscas + corte) ---------- */
+const VS = `
+#include <clipping_planes_pars_vertex>
+varying vec3 vN; varying vec3 vP; varying vec3 vV;
+void main(){
+  vec4 p = vec4(position, 1.0);
+  vP = p.xyz;
+  vec4 mvPosition = modelViewMatrix * p;
+  vV = -mvPosition.xyz;
+  vN = normalize(normalMatrix * normal);
+  gl_Position = projectionMatrix * mvPosition;
+  #include <clipping_planes_vertex>
+}`;
+const FS = `
+#define NS ${NS}
+#include <clipping_planes_pars_fragment>
+uniform vec3 uColor; uniform vec3 uRim; uniform vec3 uSparkColor;
+uniform float uGlow; uniform float uHover; uniform float uAlphaMin; uniform float uAlphaMax; uniform float uSpec;
+uniform vec4 uSparks[NS];
+uniform mat4 uInnerInv;
+varying vec3 vN; varying vec3 vP; varying vec3 vV;
+void main(){
+  #include <clipping_planes_fragment>
+  vec3 n = normalize(vN); vec3 v = normalize(vV);
+  bool inside = !gl_FrontFacing;
+  if(inside) n = -n;
+  float ndv = clamp(dot(n, v), 0.0, 1.0);
+  float fres = pow(1.0 - ndv, 2.4);
+  vec3 L = normalize(vec3(0.45, 0.75, 0.55));
+  float diff = max(dot(n, L), 0.0);
+  float back = max(dot(n, normalize(vec3(-0.6, -0.45, -0.2))), 0.0);
+  float spec = pow(max(dot(reflect(-L, n), v), 0.0), 26.0) * uSpec;
+  vec3 col = uColor * (0.22 + 0.78 * diff) + uColor * back * 0.18 + uRim * fres * 0.9 + vec3(spec);
+  if(inside) col = uColor * 0.55 + uRim * 0.12;
+  float s = 0.0;
+  for (int i = 0; i < NS; i++) { vec3 d = vP - uSparks[i].xyz; s += uSparks[i].w * exp(-dot(d, d) * 5.0); }
+  col += uSparkColor * s * 1.3;
+  col += uColor * uGlow * 0.8 + uRim * uGlow * 0.45;
+  col += (uRim * 0.5 + vec3(0.1)) * uHover;
+  float a = mix(uAlphaMin, uAlphaMax, 1.0 - pow(ndv, 1.4));
+  gl_FragColor = vec4(col, clamp(a + s * 0.3 + uGlow * 0.25 + uHover * 0.12, 0.0, 1.0));
+}`;
+const shared = {
+  uSparks: { value: Array.from({ length: NS }, () => new THREE.Vector4()) },
+  uSparkColor: { value: new THREE.Color(0xe9f9ff) }
+};
+const cutLocal = new THREE.Plane(V3(0, 0, -1), 0), cutPlane = new THREE.Plane();
+let cut = false;
+function tissue(color, rim, o = {}) {
+  const m = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(color) }, uRim: { value: new THREE.Color(rim) },
+      uGlow: { value: 0 }, uHover: { value: 0 },
+      uAlphaMin: { value: o.aMin ?? 1 }, uAlphaMax: { value: o.aMax ?? 1 }, uSpec: { value: o.spec ?? 0.22 },
+      uSparks: shared.uSparks, uSparkColor: shared.uSparkColor
+    },
+    vertexShader: VS, fragmentShader: FS,
+    transparent: !!o.transparent, depthWrite: !o.transparent, side: THREE.DoubleSide
+  });
+  m.clipping = true; m.clippingPlanes = [cutPlane];
+  return m;
+}
+const mats = {
+  bexiga: tissue(0xc65448, 0xffb09a, { transparent: true, aMin: 0.32, aMax: 0.94 }),
+  ureter: tissue(0xe9c46f, 0xfff1c6),
+  uretra: tissue(0xffa45c, 0xffe2b8),
+  prostata: tissue(0x8657c9, 0xd9b8ff, { transparent: true, aMin: 0.4, aMax: 0.95 }),
+  seminal: tissue(0x7fc25a, 0xd9ffb6, { spec: 0.35 }),
+  deferente: tissue(0xe8dfcb, 0xffffff, { spec: 0.35 }),
+  ampola: tissue(0xe3d2b0, 0xffffff, { spec: 0.35 }),
+  ejaculatorio: tissue(0xb9a6ff, 0xf1e9ff),
+  bulbouretral: tissue(0xd57ccd, 0xffd2f6),
+  cavernoso: tissue(0x8c2c68, 0xff8fc8),
+  esponjoso: tissue(0xc56d9e, 0xffc9e4),
+  glande: tissue(0xdc86ae, 0xffd6ea),
+  testiculo: tissue(0xd6d4ee, 0xffffff, { spec: 0.45 }),
+  epididimo: tissue(0xe0783a, 0xffd0a3),
+  escroto: tissue(0xc99577, 0xffe1c9, { transparent: true, aMin: 0.07, aMax: 0.62 }),
+  funiculo: tissue(0xd9b66a, 0xfff0c6, { transparent: true, aMin: 0.12, aMax: 0.6 }),
+  arteria: tissue(0xe0343a, 0xff9c9c),
+  plexo: tissue(0x3d63d8, 0x9fc0ff),
+  esfincter: tissue(0xd04b3d, 0xffa696),
+  reto: tissue(0xc95f53, 0xffb3a4),
+  pube: tissue(0xeadcb6, 0xfffaea, { spec: 0.3 })
+};
+
+const pickables = [];
+function addMesh(geo, part, extra = {}) {
+  const m = new THREE.Mesh(geo, mats[part]); m.userData = { part, ...extra };
+  if (mats[part].transparent) m.renderOrder = 2;
+  inner.add(m); pickables.push(m); return m;
+}
+function taperTube(curve, ts, rs, rf) {
+  const g = new THREE.TubeGeometry(curve, ts, 1, rs, false);
+  const pos = g.attributes.position, P = V3(), Q = V3();
+  for (let i = 0; i <= ts; i++) {
+    curve.getPointAt(i / ts, P); const r = rf(i / ts);
+    for (let j = 0; j <= rs; j++) { const k = i * (rs + 1) + j; Q.fromBufferAttribute(pos, k).sub(P).multiplyScalar(r).add(P); pos.setXYZ(k, Q.x, Q.y, Q.z); }
+  }
+  pos.needsUpdate = true; return g;
+}
+const ball = (r, p, seg = 14) => new THREE.SphereGeometry(r, seg, Math.round(seg * 0.75)).translate(p.x, p.y, p.z);
+const crv = pts => new THREE.CatmullRomCurve3(pts.map(p => Array.isArray(p) ? V3(...p) : p));
+const samp = (curve, a, b, n) => Array.from({ length: n + 1 }, (_, i) => curve.getPointAt(a + (b - a) * i / n));
+function uNear(curve, p) { let best = 0, bd = Infinity; for (let i = 0; i <= 600; i++) { const d = curve.getPointAt(i / 600).distanceToSquared(p); if (d < bd) { bd = d; best = i / 600; } } return best; }
+const subCurve = (curve, a, b, n = 24) => new THREE.CatmullRomCurve3(samp(curve, a, b, n));
+// forma orgânica: raio rf(direção) multiplicado por escala, com normais por diferença finita
+function blob(rf, { s = V3(1, 1, 1), c = V3(), q = null, seg = 48 } = {}) {
+  const g = new THREE.SphereGeometry(1, seg, Math.round(seg * 0.75)), pos = g.attributes.position, nor = g.attributes.normal;
+  const d = V3(), t1 = V3(), t2 = V3(), up = V3(0, 1, 0), side = V3(1, 0, 0);
+  const P = v => { const u = v.clone().normalize(); return u.multiplyScalar(rf(u)).multiply(s); };
+  for (let i = 0; i < pos.count; i++) {
+    d.fromBufferAttribute(pos, i).normalize();
+    t1.crossVectors(d, Math.abs(d.y) < 0.9 ? up : side).normalize(); t2.crossVectors(d, t1);
+    const p0 = P(d), p1 = P(d.clone().addScaledVector(t1, 0.01)), p2 = P(d.clone().addScaledVector(t2, 0.01));
+    const n = V3().crossVectors(p1.sub(p0), p2.sub(p0)).normalize(); if (n.dot(p0) < 0) n.negate();
+    pos.setXYZ(i, p0.x, p0.y, p0.z); nor.setXYZ(i, n.x, n.y, n.z);
+  }
+  if (q) g.applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q));
+  g.translate(c.x, c.y, c.z);
+  return g;
+}
+const lobes = (u, k, a = 0.22) => (1 - a) + a * Math.abs(Math.sin(u * Math.PI * k));
+
+/* ---------- Ossos: sínfise púbica e ramos ---------- */
+addMesh(blob(d => 1 + 0.06 * Math.sin(d.y * 5), { s: V3(0.42, 1.0, 0.55), c: V3(-1.7, 0.95, 0), q: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0.3)), seg: 28 }), "pube");
+for (const s of SIDES) {
+  addMesh(taperTube(crv([[-1.75, 1.55, s * 0.35], [-1.55, 1.85, s * 1.2], [-0.9, 2.0, s * 2.1], [-0.2, 1.8, s * 2.6]]), 24, 10, u => 0.2 - 0.05 * u), "pube");
+  addMesh(taperTube(crv([[-1.5, 0.15, s * 0.38], [-0.9, -0.1, s * 0.9], [0.0, -0.35, s * 1.35], [0.6, -0.5, s * 1.6]]), 24, 10, u => 0.17 - 0.03 * u), "pube");
+}
+
+/* ---------- Reto e ânus ---------- */
+const rectumCurve = crv([[3.6, 8.0, 0], [3.95, 6.2, 0], [4.0, 4.6, 0], [3.75, 3.0, 0], [3.35, 1.8, 0], [2.85, 0.8, 0], [2.45, 0.0, 0], [2.55, -0.7, 0], [2.75, -1.25, 0]]);
+addMesh(taperTube(rectumCurve, 120, 22, u => (0.66 + 0.42 * Math.exp(-Math.pow((u - 0.55) / 0.16, 2))) * (u > 0.76 ? 1 - 0.55 * (u - 0.76) / 0.24 : 1)), "reto");
+addMesh(ball(0.66, rectumCurve.getPointAt(0), 20), "reto");
+
+/* ---------- Bexiga e ureteres ---------- */
+const BLADDER_C = V3(0, 3.25, 0);
+const neckDir = V3(0.08, -1, 0).normalize();
+const bladder = addMesh(blob(d => 1 + 0.2 * Math.pow(Math.max(0, d.dot(neckDir)), 10) + 0.03 * Math.sin(6 * d.x + 1) * Math.sin(5 * d.z + 2) * Math.sin(4 * d.y), { s: V3(1.5, 1.45, 1.35), seg: 64 }), "bexiga");
+bladder.position.copy(BLADDER_C);
+const ureterCurves = SIDES.map(s => crv([[1.0, 8.0, s * 1.7], [2.0, 6.4, s * 2.3], [2.3, 4.6, s * 2.1], [1.9, 3.2, s * 1.45], [1.25, 2.6, s * 0.78], [0.85, 2.42, s * 0.5]]));
+ureterCurves.forEach(c => { addMesh(taperTube(c, 80, 10, () => 0.085), "ureter"); addMesh(ball(0.085, c.getPointAt(0), 10), "ureter"); });
+
+/* ---------- Próstata, uretra e esfíncter ---------- */
+addMesh(blob(d => 1 - 0.16 * Math.max(0, -d.y) + 0.05 * Math.max(0, d.x) + 0.03 * Math.sin(7 * d.x) * Math.sin(6 * d.z), { s: V3(0.82, 0.7, 0.95), c: V3(0.32, 0.95, 0), seg: 48 }), "prostata");
+const urethraCurve = crv([[0.15, 1.65, 0], [0.3, 1.2, 0], [0.33, 0.75, 0], [0.28, 0.35, 0], [0.22, 0.0, 0], [0.18, -0.35, 0], [0.0, -0.68, 0], [-0.5, -0.8, 0], [-1.2, -0.78, 0], [-1.9, -0.88, 0], [-2.5, -1.3, 0], [-2.82, -2.1, 0], [-2.92, -3.0, 0], [-2.9, -3.8, 0], [-2.84, -4.45, 0]]);
+addMesh(taperTube(urethraCurve, 220, 10, () => 0.085), "uretra");
+const MEATUS = urethraCurve.getPointAt(1), MEATUS_DIR = urethraCurve.getTangentAt(1);
+const U = {
+  join: uNear(urethraCurve, V3(0.33, 0.78, 0)),
+  apex: uNear(urethraCurve, V3(0.28, 0.35, 0)),
+  sph: uNear(urethraCurve, V3(0.2, -0.17, 0)),
+  postSph: uNear(urethraCurve, V3(0.18, -0.38, 0)),
+  bulb: uNear(urethraCurve, V3(0.04, -0.64, 0)),
+  root: uNear(urethraCurve, V3(-0.5, -0.8, 0))
+};
+{
+  const p = urethraCurve.getPointAt(U.sph), T = urethraCurve.getTangentAt(U.sph);
+  const g = new THREE.TorusGeometry(0.2, 0.08, 12, 32);
+  g.applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(V3(0, 0, 1), T)));
+  g.translate(p.x, p.y, p.z);
+  addMesh(g, "esfincter");
+}
+
+/* ---------- Pênis: bulbo, corpo esponjoso, glande e corpos cavernosos ---------- */
+const GLANS_C = MEATUS.clone().addScaledVector(MEATUS_DIR, -0.5);
+addMesh(blob(d => 1 - 0.22 * Math.max(0, d.y) + 0.07 * Math.exp(-Math.pow((d.y + 0.45) / 0.14, 2)), { s: V3(0.5, 0.62, 0.5), c: GLANS_C, q: new THREE.Quaternion().setFromUnitVectors(V3(0, 1, 0), MEATUS_DIR), seg: 40 }), "glande");
+const uGlans = uNear(urethraCurve, GLANS_C);
+addMesh(blob(d => 1 + 0.08 * Math.max(0, d.x), { s: V3(0.62, 0.42, 0.5), c: V3(0.22, -0.74, 0), seg: 32 }), "esponjoso");
+addMesh(taperTube(subCurve(urethraCurve, U.bulb, uGlans, 40), 120, 16, u => 0.27 + 0.04 * Math.exp(-u * 12)), "esponjoso");
+const shaftDorsal = (u, s) => { const p = urethraCurve.getPointAt(u), T = urethraCurve.getTangentAt(u); return p.add(V3(T.y, -T.x, 0).normalize().multiplyScalar(0.38)).setZ(s * 0.28); };
+for (const s of SIDES) {
+  const pts = [V3(0.15, -0.42, s * 0.95), V3(-0.25, -0.57, s * 0.68)];
+  for (let i = 0; i <= 16; i++) pts.push(shaftDorsal(U.root + (uGlans - U.root - 0.01) * i / 16, s));
+  const c = crv(pts);
+  addMesh(taperTube(c, 160, 16, u => u < 0.14 ? 0.15 + 0.17 * (u / 0.14) : 0.32 - 0.04 * Math.max(0, (u - 0.9) / 0.1)), "cavernoso", { side: s });
+  addMesh(ball(0.15, pts[0], 12), "cavernoso");
+}
+
+/* ---------- Testículos, epidídimo, ducto deferente, glândulas ---------- */
+const qT = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0.25));
+const TESTIS = SIDES.map(s => V3(-1.0, -3.3, s * 0.62));
+const tp = (i, x, y, z = 0) => V3(x, y, 0).applyQuaternion(qT).add(TESTIS[i]).add(V3(0, 0, SIDES[i] * z));
+const side = { epi: [], def: [], amp: [], ej: [], sem: [], sheath: [], art: [] };
+SIDES.forEach((s, i) => {
+  addMesh(blob(d => 1 + 0.02 * Math.sin(6 * d.y), { s: V3(0.58, 0.78, 0.48), c: TESTIS[i], q: qT, seg: 40 }), "testiculo");
+  const epi = crv([tp(i, 0.18, 0.84, 0.06), tp(i, 0.55, 0.58, 0.08), tp(i, 0.68, 0.06, 0.08), tp(i, 0.56, -0.45, 0.06), tp(i, 0.3, -0.82, 0.04)]);
+  addMesh(taperTube(epi, 60, 14, u => (0.09 + 0.14 * Math.pow(1 - u, 1.4)) * lobes(u, 9, 0.12)), "epididimo");
+  addMesh(ball(0.22, epi.getPointAt(0), 16), "epididimo");
+  const def = crv([epi.getPointAt(1), tp(i, 0.65, -0.88, 0.04), tp(i, 0.86, -0.35, 0.05), tp(i, 0.8, 0.45, 0.06), tp(i, 0.55, 1.05, 0.08),
+    [-0.85, -1.35, s * 0.72], [-1.3, -0.3, s * 0.88], [-1.75, 0.9, s * 1.15], [-1.9, 2.0, s * 1.6], [-1.5, 2.9, s * 2.0], [-0.4, 3.9, s * 1.85], [0.9, 4.0, s * 1.5], [1.6, 3.2, s * 1.2], [1.62, 2.45, s * 0.78]]);
+  addMesh(taperTube(def, 260, 10, () => 0.07), "deferente");
+  const J = V3(0.95, 1.4, s * 0.22);
+  const amp = crv([[1.62, 2.45, s * 0.78], [1.52, 2.05, s * 0.58], [1.22, 1.62, s * 0.34], J]);
+  addMesh(taperTube(amp, 40, 12, u => 0.075 + 0.06 * Math.sin(Math.PI * Math.min(1, u * 1.15)) * lobes(u, 4, 0.3)), "ampola");
+  const ej = crv([J, [0.7, 1.15, s * 0.13], [0.48, 0.88, s * 0.05], [0.34, 0.78, 0]]);
+  addMesh(taperTube(ej, 20, 8, () => 0.045), "ejaculatorio");
+  const sem = crv([[0.98, 1.45, s * 0.3], [1.35, 1.78, s * 0.55], [1.7, 2.05, s * 0.95], [1.95, 2.35, s * 1.32], [2.0, 2.62, s * 1.62]]);
+  addMesh(taperTube(sem, 70, 14, u => Math.max(0.03, (0.08 + 0.15 * Math.min(1, u * 4)) * lobes(u, 6) * Math.sqrt(Math.max(0, 1 - Math.pow(Math.max(0, (u - 0.88) / 0.12), 2))))), "seminal");
+  addMesh(ball(0.11, V3(0.42, -0.28, s * 0.25), 14), "bulbouretral");
+  const sheath = crv([tp(i, 0.35, 0.92, 0.04), [-0.88, -1.4, s * 0.74], [-1.32, -0.3, s * 0.9], [-1.77, 0.9, s * 1.17], [-1.92, 2.0, s * 1.62]]);
+  addMesh(taperTube(sheath, 80, 18, u => 0.12 + 0.16 * Math.pow(Math.sin(Math.PI * u), 0.35)), "funiculo");
+  const art = crv([tp(i, 0.02, 0.8), ...samp(sheath, 0.05, 1, 6).map(p => p.add(V3(-0.1, 0, -s * 0.03))), V3(-1.6, 3.0, s * 2.05), V3(-1.0, 4.6, s * 2.15), V3(-0.6, 6.4, s * 1.9), V3(-0.4, 8.0, s * 1.6)]);
+  addMesh(taperTube(art, 140, 8, () => 0.045), "arteria");
+  for (const ph of [0, Math.PI]) {
+    const pts = [];
+    for (let k = 0; k <= 90; k++) {
+      const u = k / 90 * 0.52, p = art.getPointAt(u), T = art.getTangentAt(u);
+      const a = V3().crossVectors(T, V3(0, 0, 1)).normalize(), b = V3().crossVectors(T, a);
+      const f = u * 46 + ph, r = 0.1 + 0.03 * Math.sin(u * 23 + ph);
+      pts.push(p.addScaledVector(a, Math.cos(f) * r).addScaledVector(b, Math.sin(f) * r));
+    }
+    addMesh(taperTube(crv(pts), 240, 6, () => 0.042), "plexo");
+  }
+  side.epi[i] = epi; side.def[i] = def; side.amp[i] = amp; side.ej[i] = ej; side.sem[i] = sem; side.sheath[i] = sheath; side.art[i] = art;
+});
+addMesh(blob(d => 1 - 0.13 * Math.exp(-d.z * d.z / 0.02) * (0.4 + 0.6 * Math.max(0, -d.y)) + 0.12 * Math.pow(Math.max(0, d.y), 3), { s: V3(1.0, 1.22, 1.42), c: V3(-1.0, -3.35, 0), seg: 56 }), "escroto");
+
+/* ---------- Centralizar ---------- */
+const box = new THREE.Box3().setFromObject(inner);
+const MODEL_R = Math.max(...box.getSize(V3()).toArray()) / 2;
+inner.position.copy(box.getCenter(V3()).negate());
+
+/* ---------- Pontos de etiqueta (sd = lado visível: +1 inteiro, −1 no corte) ---------- */
+const sIdx = sd => sd > 0 ? 0 : 1;
+const ANCH = {
+  bexiga: () => V3(-0.9, 4.41, 0),
+  ureter: sd => ureterCurves[sIdx(sd)].getPointAt(0.3),
+  deferente: sd => side.def[sIdx(sd)].getPointAt(0.66),
+  seminal: sd => side.sem[sIdx(sd)].getPointAt(0.75),
+  prostata: () => V3(-0.3, 0.5, 0),
+  uretra: () => urethraCurve.getPointAt(U.postSph),
+  bulbouretral: sd => V3(0.42, -0.28, sd * 0.25),
+  cavernoso: sd => shaftDorsal(U.root + (uGlans - U.root) * 0.45, sd),
+  glande: () => GLANS_C.clone(),
+  testiculo: sd => tp(sIdx(sd), -0.35, -0.45),
+  epididimo: sd => side.epi[sIdx(sd)].getPointAt(0.3),
+  escroto: () => V3(-1.0, -4.57, 0),
+  funiculo: sd => side.sheath[sIdx(sd)].getPointAt(0.45),
+  reto: () => rectumCurve.getPointAt(0.42),
+  pube: () => V3(-1.85, 1.65, 0)
+};
+const MINOR = new Set(["ureter", "bulbouretral", "funiculo", "cavernoso", "reto", "pube"]);
+const tagEls = {};
+const TAG_NAMES = { bexiga: "Bexiga urinária", ureter: "Ureter", deferente: "Ducto deferente", seminal: "Glândula seminal", prostata: "Próstata", uretra: "Uretra", bulbouretral: "Gl. bulbouretral", cavernoso: "Corpo cavernoso", glande: "Glande", testiculo: "Testículo", epididimo: "Epidídimo", escroto: "Escroto", funiculo: "Funículo espermático", reto: "Reto", pube: "Sínfise púbica" };
+for (const k of Object.keys(ANCH)) { const el = document.createElement("div"); el.className = "tag" + (MINOR.has(k) ? " minor" : ""); el.textContent = TAG_NAMES[k]; $("#tags").appendChild(el); tagEls[k] = el; }
+
+/* ---------- Partículas: poeira e gotículas na saída ---------- */
+function radialTex(stops) {
+  const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d");
+  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); stops.forEach(([o, col]) => gr.addColorStop(o, col));
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c);
+}
+const sparkTex = radialTex([[0, "rgba(255,255,255,1)"], [0.16, "rgba(255,255,255,.95)"], [0.42, "rgba(255,255,255,.35)"], [1, "rgba(255,255,255,0)"]]);
+const dotTex = radialTex([[0, "rgba(255,255,255,1)"], [0.35, "rgba(255,255,255,.75)"], [1, "rgba(255,255,255,0)"]]);
+let dust;
+{
+  const n = 520, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { pos[i * 3] = (Math.random() - .5) * 90; pos[i * 3 + 1] = (Math.random() - .5) * 55; pos[i * 3 + 2] = -40 + Math.random() * 46; }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  dust = new THREE.Points(g, new THREE.PointsMaterial({ size: 0.16, map: dotTex, color: 0xb28aff, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
+  scene.add(dust);
+}
+const NTN = 600, ntPos = new Float32Array(NTN * 3), ntCol = new Float32Array(NTN * 3), ntP = Array.from({ length: NTN }, () => ({ life: 0, c: [1, 1, 1] }));
+const ntGeo = new THREE.BufferGeometry();
+ntGeo.setAttribute("position", new THREE.BufferAttribute(ntPos, 3)); ntGeo.setAttribute("color", new THREE.BufferAttribute(ntCol, 3));
+const nt = new THREE.Points(ntGeo, new THREE.PointsMaterial({ size: 0.13, map: dotTex, vertexColors: true, transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }));
+nt.frustumCulled = false; nt.renderOrder = 9; inner.add(nt);
+function release(center, dir, hex, count = 40) {
+  const col = new THREE.Color(hex), c = [col.r, col.g, col.b]; let made = 0;
+  for (const p of ntP) {
+    if (p.life > 0) continue;
+    const rd = randUnit(Math.random);
+    p.x = center.x + rd.x * 0.08; p.y = center.y + rd.y * 0.08; p.z = center.z + rd.z * 0.08;
+    const sp = 1.2 + Math.random() * 1.4;
+    p.vx = dir.x * sp + rd.x * 0.45; p.vy = dir.y * sp + rd.y * 0.45; p.vz = dir.z * sp + rd.z * 0.45;
+    p.life = 1; p.max = 1.4 + Math.random() * 1.2; p.c = c;
+    if (++made >= count) break;
+  }
+}
+function updateNT(dt) {
+  for (let i = 0; i < NTN; i++) {
+    const p = ntP[i];
+    if (p.life > 0) {
+      p.life -= dt / p.max; const k = Math.pow(0.965, dt * 60);
+      p.vx *= k; p.vy = p.vy * k - dt * 0.9; p.vz *= k; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      ntPos[i * 3] = p.x; ntPos[i * 3 + 1] = p.y; ntPos[i * 3 + 2] = p.z;
+    }
+    const a = Math.max(0, p.life);
+    ntCol[i * 3] = p.c[0] * a; ntCol[i * 3 + 1] = p.c[1] * a; ntCol[i * 3 + 2] = p.c[2] * a;
+  }
+  ntGeo.attributes.position.needsUpdate = true; ntGeo.attributes.color.needsUpdate = true;
+}
+
+/* ---------- Faíscas que percorrem caminhos ---------- */
+function polyline(pts) { const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i].distanceTo(pts[i - 1])); return { pts, cum, len: cum[cum.length - 1] }; }
+function pointOn(pl, d, out) {
+  d = clamp(d, 0, pl.len); let lo = 0, hi = pl.cum.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pl.cum[m] <= d) lo = m; else hi = m; }
+  const seg = pl.cum[hi] - pl.cum[lo] || 1;
+  return out.copy(pl.pts[lo]).lerp(pl.pts[hi], (d - pl.cum[lo]) / seg);
+}
+function chain(secs) {
+  const pts = [], ends = [];
+  secs.forEach(sec => { sec.forEach((p, i) => { if (i === 0 && pts.length && p.distanceTo(pts[pts.length - 1]) < 1e-4) return; pts.push(p.clone()); }); ends.push(pts.length - 1); });
+  const pl = polyline(pts); pl.marks = ends.map(i => pl.cum[i]); return pl;
+}
+function keyDist(keys, e) {
+  if (e <= keys[0][0]) return keys[0][1];
+  for (let i = 1; i < keys.length; i++) if (e <= keys[i][0]) { const [t0, d0] = keys[i - 1], [t1, d1] = keys[i]; return d0 + (d1 - d0) * ((e - t0) / (t1 - t0 || 1)); }
+  return keys[keys.length - 1][1];
+}
+function makeSprite(size, opacity, color) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkTex, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false }));
+  s.scale.setScalar(size); s.renderOrder = 10; inner.add(s); return s;
+}
+const sparks = [];
+function spawnSpark(pl, keys, o = {}) {
+  if (sparks.length >= NS) return null;
+  const size = o.size ?? 0.6, color = o.color ?? 0xffffff;
+  const s = { pl, keys, t0: performance.now(), amp: o.amp ?? 1, size, onEnd: o.onEnd, pos: V3(), sprite: makeSprite(size, 1, color), trail: [] };
+  for (let k = 0; k < 6; k++) s.trail.push(makeSprite(size * (0.8 - k * 0.1), 0.6 - k * 0.09, color));
+  sparks.push(s); return s;
+}
+function killSpark(s) { [s.sprite, ...s.trail].forEach(sp => { inner.remove(sp); sp.material.dispose(); }); }
+const tmpV = V3();
+function updateSparks(now) {
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i], e = (now - s.t0) / 1000;
+    const d = keyDist(s.keys, e);
+    pointOn(s.pl, d, s.pos);
+    const fade = Math.min(1, e / 0.08);
+    s.sprite.position.copy(s.pos); s.sprite.scale.setScalar(s.size * fade);
+    s.trail.forEach((t, k) => t.position.copy(pointOn(s.pl, d - (k + 1) * 0.09, tmpV)));
+    if (e >= s.keys[s.keys.length - 1][0]) { sparks.splice(i, 1); killSpark(s); s.onEnd && s.onEnd(); }
+  }
+  const u = shared.uSparks.value;
+  for (let i = 0; i < NS; i++) {
+    const s = sparks[i];
+    if (s) { const e = (now - s.t0) / 1000; u[i].set(s.pos.x, s.pos.y, s.pos.z, s.amp * Math.min(1, e / 0.08)); }
+    else u[i].w = 0;
+  }
+}
+
+/* ---------- Rotas ---------- */
+const spermRoutes = SIDES.map((s, i) => {
+  const c = TESTIS[i], e = side.epi[i];
+  return chain([
+    [c, tp(i, 0.12, 0.55, 0.03), e.getPointAt(0)],
+    samp(e, 0, 1, 40),
+    samp(side.def[i], 0, 1, 160),
+    samp(side.amp[i], 0, 1, 24),
+    samp(side.ej[i], 0, 1, 12),
+    samp(urethraCurve, U.join, U.bulb, 50),
+    samp(urethraCurve, U.bulb, 1, 120)
+  ]);
+});
+const semRoutes = SIDES.map((s, i) => polyline([...samp(side.sem[i], 1, 0, 40), side.amp[i].getPointAt(1)]));
+const ureterRoutes = ureterCurves.map(c => polyline(samp(c, 0, 1, 80)));
+const urethraRoute = chain([
+  [BLADDER_C.clone().add(V3(0.05, -0.4, 0)), urethraCurve.getPointAt(0)],
+  samp(urethraCurve, 0, U.apex, 40),
+  samp(urethraCurve, U.apex, U.postSph, 20),
+  samp(urethraCurve, U.postSph, 1, 160)
+]);
+
+/* ---------- Brilho das partes e enchimento da bexiga ---------- */
+const partGlow = {};
+const glow = (p, v = 1) => { partGlow[p] = Math.max(partGlow[p] || 0, v); };
+let fill = 0, fillTarget = 0;
+
+/* ---------- Trajetos (máquina de etapas) ---------- */
+let flow = null, routeKind = "sperm", flowCount = 0, lastFlowEnd = 0;
+const FACTS = {
+  sperm: [
+    "Durante a ejaculação o esfíncter interno fecha a bexiga: urina e sêmen nunca saem juntos.",
+    "Cada ejaculação leva de 40 a 300 milhões de espermatozoides.",
+    "O caminho todo, do testículo à uretra, tem mais de 6 metros por causa do epidídimo enrolado."
+  ],
+  urine: [
+    "A bexiga avisa o cérebro quando está com uns 200 mL. Dá para segurar bem mais que isso.",
+    "Um adulto produz de 1 a 2 litros de urina por dia.",
+    "Homem e mulher têm ureteres e bexiga iguais. Só no homem a uretra é compartilhada com o sêmen."
+  ]
+};
+function renderRoute(kind) {
+  routeKind = kind;
+  const R = STAGES[kind];
+  $("#route").dataset.kind = kind;
+  setTxt("#routeName", R.name);
+  $("#steps").innerHTML = R.steps.map(([n, d], i) => `<li data-s="todo"><i>${i + 1}</i><div><b>${n}</b><span>${d}</span></div></li>`).join("");
+  setStage(-1);
+}
+function setStage(i) {
+  const steps = STAGES[routeKind].steps, lis = $("#steps").children;
+  for (let k = 0; k < lis.length; k++) {
+    const s = k < i ? "done" : k === i ? "now" : "todo";
+    if (lis[k].dataset.s !== s) { lis[k].dataset.s = s; lis[k].querySelector("i").textContent = s === "done" ? "✓" : k + 1; }
+  }
+  setTxt("#routeCount", i < 0 ? `${steps.length} etapas` : i >= steps.length ? "concluído" : `${i + 1} de ${steps.length}`);
+  const chip = $("#chip");
+  if (i >= 0 && i < steps.length) { chip.textContent = `${i + 1}/${steps.length} · ${steps[i][0]}`; chip.style.color = routeKind === "urine" ? "var(--urine)" : "var(--signal)"; }
+  if (i >= 0 && i < steps.length) tone(620 + i * 70, 560 + i * 70, 0.06, 0.03, "sine");
+}
+function busy(fromButton) { if (fromButton) toast("Espere o trajeto atual terminar."); return false; }
+function beginFlow(kind) {
+  noteActivity(); unlockAudio();
+  shared.uSparkColor.value.set(STAGES[kind].color);
+  renderRoute(kind); setStage(0);
+  document.body.classList.add("flowing");
+  flowCount++;
+  whoosh();
+}
+function finishFlow(kind) {
+  setStage(STAGES[kind].steps.length);
+  flow = null; lastFlowEnd = performance.now();
+  document.body.classList.remove("flowing");
+  const f = FACTS[kind]; toast(f[(flowCount - 1) % f.length], 5200);
+  tone(880, 1320, 0.18, 0.035, "sine"); tone(1320, 990, 0.25, 0.025, "sine", 0.12);
+}
+function startSperm(fromButton) {
+  if (flow) return busy(fromButton);
+  beginFlow("sperm");
+  const col = STAGES.sperm.color;
+  spermRoutes.forEach(pl => { const m = pl.marks; spawnSpark(pl, [[0, 0], [0.7, m[0]], [2.0, m[1]], [3.2, m[2]], [3.7, m[3]], [4.2, m[4]], [4.8, m[5]], [5.4, m[6]]], { size: 0.5, amp: 0.9, color: col }); });
+  const ev = [
+    { t: 0.0, fn: () => glow("testiculo") },
+    { t: 0.7, fn: () => { setStage(1); glow("epididimo"); } },
+    { t: 2.0, fn: () => { setStage(2); glow("deferente", 0.8); glow("funiculo", 0.6); } },
+    { t: 2.72, fn: () => semRoutes.forEach(pl => spawnSpark(pl, [[0, 0], [0.5, pl.len]], { size: 0.42, amp: 0.7, color: 0xc8ff9e })) },
+    { t: 3.2, fn: () => { setStage(3); glow("seminal"); glow("ampola"); } },
+    { t: 3.7, fn: () => { setStage(4); glow("prostata"); glow("ejaculatorio"); } },
+    { t: 4.7, fn: () => { setStage(5); glow("bulbouretral"); } },
+    { t: 4.95, fn: () => { setStage(6); glow("esponjoso", 0.6); } },
+    { t: 5.4, fn: () => { release(MEATUS, MEATUS_DIR, 0xf2fbff, 46); glow("glande"); finishFlow("sperm"); } }
+  ];
+  flow = { kind: "sperm", t0: performance.now(), events: ev };
+  return true;
+}
+function startUrine(fromButton) {
+  if (flow) return busy(fromButton);
+  beginFlow("urine");
+  const col = STAGES.urine.color;
+  glow("ureter");
+  ureterRoutes.forEach(pl => spawnSpark(pl, [[0, 0], [1.6, pl.len]], { size: 0.5, amp: 0.85, color: col }));
+  const m = urethraRoute.marks;
+  const ev = [
+    { t: 1.6, fn: () => { setStage(1); glow("bexiga", 0.8); fillTarget = 1; } },
+    { t: 3.0, fn: () => { setStage(2); fillTarget = 0; glow("bexiga", 0.6); spawnSpark(urethraRoute, [[0, 0], [0.5, m[0]], [1.0, m[1]], [1.35, m[2]], [2.3, m[3]]], { size: 0.5, amp: 0.9, color: col }); } },
+    { t: 3.5, fn: () => { setStage(3); glow("prostata", 0.5); glow("uretra"); } },
+    { t: 4.0, fn: () => { setStage(4); glow("esfincter"); } },
+    { t: 4.35, fn: () => { setStage(5); glow("esponjoso", 0.5); } },
+    { t: 5.3, fn: () => { release(MEATUS, MEATUS_DIR, col, 46); glow("glande", 0.7); finishFlow("urine"); } }
+  ];
+  flow = { kind: "urine", t0: performance.now(), events: ev };
+  return true;
+}
+const SPERM_PARTS = new Set(["testiculo", "epididimo", "deferente", "ampola", "seminal", "ejaculatorio", "escroto", "funiculo", "arteria", "plexo", "prostata", "bulbouretral", "cavernoso", "glande"]);
+const URINE_PARTS = new Set(["bexiga", "ureter", "esfincter"]);
+let alt = 0;
+function triggerFor(part) {
+  if (SPERM_PARTS.has(part)) startSperm(false);
+  else if (URINE_PARTS.has(part)) startUrine(false);
+  else if (part === "uretra" || part === "esponjoso") (alt++ % 2 ? startUrine : startSperm)(false);
+}
+
+/* ---------- Câmera 3D e ajuste de tela ---------- */
+let zoom = 1, zoomTarget = 1;
+function fit() {
+  W = innerWidth; H = innerHeight; DPR = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(DPR); renderer.setSize(W, H, false);
+  ov.width = Math.round(W * DPR); ov.height = Math.round(H * DPR);
+  camera.aspect = W / H;
+  const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const wide = W >= 1000;
+  const Rpx = wide ? Math.min(0.22 * W, 0.4 * H) : Math.min(0.44 * W, 0.3 * H);
+  if (wide) camera.setViewOffset(W, H, Math.round(W * 0.02), Math.round(H * 0.06), W, H); else camera.setViewOffset(W, H, 0, Math.round(H * 0.13), W, H);
+  const d = MODEL_R * H / (2 * t * Rpx);
+  camera.position.set(0, 0, d); camera.near = d * 0.05; camera.far = d * 5; camera.updateProjectionMatrix();
+  for (const k in tagEls) tagEls[k].w = 0;
+}
+
+/* ---------- Entrada unificada: mouse, toque e mãos ---------- */
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), tmpL = V3();
+const SHELL = { escroto: 1, funiculo: 1 };
+function pick(x, y) {
+  ndc.set((x / W) * 2 - 1, -(y / H) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  let hits = ray.intersectObjects(pickables, false);
+  if (cut) hits = hits.filter(h => inner.worldToLocal(tmpL.copy(h.point)).z <= 0.02);
+  if (!hits.length) return null;
+  let h = hits[0];
+  if (SHELL[h.object.userData.part]) { const n = hits.find(k => !SHELL[k.object.userData.part]); if (n && n.distance - h.distance < 3 * zoom) h = n; }
+  return { part: h.object.userData.part };
+}
+const qa = new THREE.Quaternion(), AX_X = V3(1, 0, 0), AX_Y = V3(0, 1, 0), AX_Z = V3(0, 0, 1);
+function orbit(dx, dy) {
+  qa.setFromAxisAngle(AX_Y, dx * 0.0065); pivot.quaternion.premultiply(qa);
+  qa.setFromAxisAngle(AX_X, dy * 0.0065); pivot.quaternion.premultiply(qa);
+}
+function twist(da) { qa.setFromAxisAngle(AX_Z, -da); pivot.quaternion.premultiply(qa); }
+const spin = { x: 0, y: 0 };
+const grabs = new Map(); let duo = null;
+const ripples = [];
+let selPart = null, selUntil = 0;
+function down(id, x, y) {
+  noteActivity(); unlockAudio();
+  grabs.set(id, { x, y, x0: x, y0: y, t0: performance.now(), hit: pick(x, y), moved: false, duo: false });
+  spin.x = spin.y = 0;
+  if (grabs.size >= 2) startDuo();
+}
+function startDuo() {
+  const [a, b] = [...grabs.values()];
+  a.duo = b.duo = true;
+  duo = { d0: Math.hypot(b.x - a.x, b.y - a.y) || 1, s0: zoomTarget, ang: Math.atan2(b.y - a.y, b.x - a.x), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+}
+function move(id, x, y) {
+  const g = grabs.get(id); if (!g) return;
+  noteActivity();
+  const dx = x - g.x, dy = y - g.y; g.x = x; g.y = y;
+  if (Math.hypot(x - g.x0, y - g.y0) > 14) g.moved = true;
+  if (grabs.size >= 2) {
+    if (!duo) startDuo();
+    const [a, b] = [...grabs.values()];
+    zoomTarget = clamp(duo.s0 * Math.hypot(b.x - a.x, b.y - a.y) / duo.d0, 0.45, 3.2);
+    const ang = Math.atan2(b.y - a.y, b.x - a.x);
+    let da = ang - duo.ang; if (da > Math.PI) da -= 2 * Math.PI; if (da < -Math.PI) da += 2 * Math.PI;
+    twist(da); duo.ang = ang;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2; orbit(mx - duo.mx, my - duo.my); duo.mx = mx; duo.my = my;
+  } else {
+    orbit(dx, dy); spin.x = clamp(dx, -30, 30); spin.y = clamp(dy, -30, 30);
+  }
+}
+function up(id) {
+  const g = grabs.get(id); if (!g) return;
+  grabs.delete(id);
+  if (grabs.size < 2) duo = null;
+  if (!g.moved && !g.duo && performance.now() - g.t0 < 650) {
+    spin.x = spin.y = 0;
+    if (g.hit) {
+      ripples.push({ x: g.x, y: g.y, t: performance.now() });
+      selPart = g.hit.part; selUntil = performance.now() + 6000; glow(g.hit.part, 0.7);
+      triggerFor(g.hit.part);
+    }
+  }
+  if (g.duo) spin.x = spin.y = 0;
+  noteActivity();
+}
+
+let mouse = null;
+glCanvas.addEventListener("pointerdown", e => { down("p" + e.pointerId, e.clientX, e.clientY); glCanvas.setPointerCapture(e.pointerId); glCanvas.classList.add("dragging"); });
+glCanvas.addEventListener("pointermove", e => {
+  move("p" + e.pointerId, e.clientX, e.clientY);
+  if (e.pointerType === "mouse") { mouse = { x: e.clientX, y: e.clientY }; noteActivity(); }
+});
+glCanvas.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") mouse = null; });
+const pUp = e => { up("p" + e.pointerId); glCanvas.classList.remove("dragging"); };
+glCanvas.addEventListener("pointerup", pUp);
+glCanvas.addEventListener("pointercancel", pUp);
+glCanvas.addEventListener("wheel", e => { e.preventDefault(); zoomTarget = clamp(zoomTarget * Math.exp(-e.deltaY * 0.0012), 0.45, 3.2); noteActivity(); }, { passive: false });
+
+/* ---------- Mãos (MediaPipe) ---------- */
+const HAND_COLORS = [[95, 215, 255], [255, 143, 90]];
+const LINKS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const hands = new Map();
+let landmarker = null, lastVT = -1, detCount = 0, detFps = 0, detT0 = performance.now();
+function vidToScreen(nx, ny) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const s = Math.max(W / vw, H / vh), dw = vw * s, dh = vh * s;
+  return [W - ((W - dw) / 2 + nx * dw), (H - dh) / 2 + ny * dh];
+}
+function handPress(h) {
+  h.pid = "hand-" + h.key;
+  const el = document.elementFromPoint(h.sx, h.sy);
+  const btn = el && el.closest ? el.closest("button") : null;
+  if (btn) {
+    if (!btn.hidden) { btn.classList.add("pressed"); setTimeout(() => btn.classList.remove("pressed"), 180); btn.click(); }
+    h.grabbing = false; return;
+  }
+  down(h.pid, h.sx, h.sy); h.grabbing = true;
+}
+function handRelease(h) { if (h.grabbing) up(h.pid); h.grabbing = false; }
+function processHands(res, now) {
+  const seen = new Set(), list = res.landmarks || [];
+  const vw = video.videoWidth, vh = video.videoHeight;
+  list.forEach((lm, i) => {
+    const cat = res.handedness && res.handedness[i] && res.handedness[i][0];
+    let key = (cat && cat.categoryName) || "mao"; if (seen.has(key)) key += i; seen.add(key);
+    let h = hands.get(key);
+    if (!h) { h = { key, color: HAND_COLORS[key.startsWith("Left") ? 1 : 0], pinch: false, grabbing: false, sx: null, sy: null, pts: [] }; hands.set(key, h); }
+    h.last = now; h.score = cat ? cat.score : 0;
+    h.pts = lm.map(p => vidToScreen(p.x, p.y));
+    const d = (a, b) => Math.hypot((lm[a].x - lm[b].x) * vw, (lm[a].y - lm[b].y) * vh);
+    const ratio = d(4, 8) / (d(0, 9) || 1);
+    const tx = (h.pts[4][0] + h.pts[8][0]) / 2, ty = (h.pts[4][1] + h.pts[8][1]) / 2;
+    if (h.sx === null) { h.sx = tx; h.sy = ty; } else { h.sx += (tx - h.sx) * 0.55; h.sy += (ty - h.sy) * 0.55; }
+    const was = h.pinch;
+    if (!was && ratio < 0.3) h.pinch = true; else if (was && ratio > 0.48) h.pinch = false;
+    if (h.pinch && !was) handPress(h);
+    else if (!h.pinch && was) handRelease(h);
+    else if (h.pinch && h.grabbing) move(h.pid, h.sx, h.sy);
+  });
+  for (const [k, h] of hands) if (now - h.last > 350) { if (h.pinch) handRelease(h); hands.delete(k); }
+  if (hands.size) noteActivity();
+}
+
+const setTxt = (id, t) => { const el = $(id); if (el.textContent !== String(t)) el.textContent = t; };
+async function startCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("sem suporte");
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }, audio: false });
+  video.srcObject = stream; await video.play();
+}
+async function startVision() {
+  const vision = await import(`${MP_BASE}/vision_bundle.mjs`);
+  const fileset = await vision.FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
+  const opts = delegate => ({ baseOptions: { modelAssetPath: MODEL_URL, delegate }, runningMode: "VIDEO", numHands: 2, minHandDetectionConfidence: 0.6, minHandPresenceConfidence: 0.6, minTrackingConfidence: 0.5 });
+  try { landmarker = await vision.HandLandmarker.createFromOptions(fileset, opts("GPU")); }
+  catch (e) { landmarker = await vision.HandLandmarker.createFromOptions(fileset, opts("CPU")); }
+}
+async function initCamera() {
+  setTxt("#vCam", "pedindo acesso…"); $("#camBtn").hidden = true;
+  try { await startCamera(); }
+  catch (e) {
+    setTxt("#vCam", "indisponível"); $("#camBtn").hidden = false;
+    setTxt("#attractTitle", "Arraste o modelo para girar");
+    setTxt("#attractSub", "clique numa parte para ver o trajeto · para usar as mãos, ligue a câmera");
+    toast("Câmera indisponível aqui. Gire com o mouse ou o dedo. Para usar as mãos, abra o arquivo no Chrome e permita a câmera.", 8000);
+    return;
+  }
+  document.body.classList.add("cam-on");
+  setTxt("#vCam", "ligada");
+  setTxt("#attractTitle", "Levante a mão e faça uma pinça para girar");
+  setTxt("#attractSub", "pinça rápida numa parte = ver o trajeto");
+  if (landmarker) return;
+  setTxt("#vModel", "carregando…");
+  try { await startVision(); setTxt("#vModel", "rodando"); $("#vDot").classList.add("live"); toast("IA de visão pronta. Levante a mão!"); }
+  catch (e) { console.error(e); setTxt("#vModel", "falhou"); toast("Não consegui carregar a IA de visão. Confira a internet e recarregue a página.", 8000); }
+}
+
+/* ---------- Som ---------- */
+let actx = null;
+function unlockAudio() { try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume(); } catch (e) {} }
+function tone(f0, f1, dur, vol, type = "triangle", at = 0) {
+  if (!actx || actx.state !== "running") return;
+  const t = actx.currentTime + at, o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.02);
+  o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur + 0.05);
+}
+const whoosh = () => { tone(180, 520, 0.35, 0.035, "sine"); tone(260, 700, 0.3, 0.02, "triangle", 0.05); };
+
+/* ---------- Interface ---------- */
+let toastT;
+function toast(msg, ms = 3400) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), ms); }
+let lastActivity = performance.now();
+function noteActivity() { lastActivity = performance.now(); }
+let showTags = true;
+$("#spermBtn").addEventListener("click", () => { unlockAudio(); startSperm(true); });
+$("#urineBtn").addEventListener("click", () => { unlockAudio(); startUrine(true); });
+$("#camBtn").addEventListener("click", () => { unlockAudio(); initCamera(); });
+$("#cutBtn").addEventListener("click", e => {
+  cut = !cut; renderer.localClippingEnabled = cut; e.currentTarget.setAttribute("aria-pressed", cut);
+  toast(cut ? "Corte sagital: metade do corpo removida, como na ilustração do atlas. Gire para ver por dentro." : "Modelo inteiro de volta.");
+  for (const k in tagEls) tagEls[k].w = 0;
+});
+$("#tagBtn").addEventListener("click", e => { showTags = !showTags; $("#tags").hidden = !showTags; e.currentTarget.setAttribute("aria-pressed", showTags); });
+$("#aiBtn").addEventListener("click", e => {
+  const on = document.body.classList.toggle("ai-view"); e.currentTarget.setAttribute("aria-pressed", on);
+  toast(on ? "Visão da IA: só os 21 pontos de cada mão, sem a imagem." : "Câmera de volta.");
+});
+$("#howBtn").addEventListener("click", e => {
+  const p = $("#howto"), open = p.hidden; p.hidden = !open; $("#hints").hidden = open; e.currentTarget.setAttribute("aria-pressed", open);
+});
+$("#fsBtn").addEventListener("click", () => {
+  unlockAudio();
+  try {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else { const r = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); r && r.catch(() => toast("Tela cheia não disponível aqui. Use F11.")); }
+  } catch (e) { toast("Tela cheia não disponível aqui. Use F11."); }
+});
+addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (k === " " || k === "e") { e.preventDefault(); $("#spermBtn").click(); }
+  else if (k === "u") $("#urineBtn").click(); else if (k === "x") $("#cutBtn").click();
+  else if (k === "n") $("#tagBtn").click(); else if (k === "v") $("#aiBtn").click();
+  else if (k === "c") $("#howBtn").click(); else if (k === "f") $("#fsBtn").click();
+});
+
+/* ---------- Overlay 2D: nomes com linhas de chamada, ondas, mãos ---------- */
+const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+const proj = V3();
+function layoutTags(hoverPart) {
+  const sd = cut ? -1 : 1, k = W < 820 ? 0.75 : 1, items = [];
+  proj.set(0, 0, 0); pivot.localToWorld(proj); proj.project(camera);
+  const cx = (proj.x + 1) / 2 * W, cy = (1 - proj.y) / 2 * H;
+  for (const key in ANCH) {
+    const el = tagEls[key];
+    if (!el.w) { el.w = el.offsetWidth; el.h = el.offsetHeight; }
+    if (!el.w) continue;
+    proj.copy(ANCH[key](sd)); inner.localToWorld(proj); proj.project(camera);
+    const x = (proj.x + 1) / 2 * W, y = (1 - proj.y) / 2 * H;
+    const dx = x - cx, dy = y - cy, L = Math.hypot(dx, dy) || 1, off = (58 + el.w * 0.42) * k;
+    items.push({ key, el, x, y, tx: x + dx / L * off, ty: y + dy / L * off * 0.7 });
+  }
+  for (let it = 0; it < 10; it++) for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+    const a = items[i], b = items[j];
+    const ox = (a.el.w + b.el.w) / 2 + 6 - Math.abs(a.tx - b.tx), oy = (a.el.h + b.el.h) / 2 + 4 - Math.abs(a.ty - b.ty);
+    if (ox > 0 && oy > 0) { const s = a.ty < b.ty ? -1 : 1; a.ty += s * oy / 2; b.ty -= s * oy / 2; }
+  }
+  for (const a of items) {
+    a.tx = clamp(a.tx, a.el.w / 2 + 8, W - a.el.w / 2 - 8); a.ty = clamp(a.ty, a.el.h / 2 + 8, H - a.el.h / 2 - 8);
+    if (a.el.cx === undefined) { a.el.cx = a.tx; a.el.cy = a.ty; } else { a.el.cx += (a.tx - a.el.cx) * 0.3; a.el.cy += (a.ty - a.el.cy) * 0.3; }
+    const on = a.key === hoverPart;
+    const vx = a.x - a.el.cx, vy = a.y - a.el.cy, sc = Math.min((a.el.w / 2) / (Math.abs(vx) || 1e-6), (a.el.h / 2) / (Math.abs(vy) || 1e-6));
+    if (sc < 1) {
+      octx.strokeStyle = on ? "rgba(255,210,63,.95)" : "rgba(246,241,255,.5)"; octx.lineWidth = 1.2;
+      octx.beginPath(); octx.moveTo(a.x, a.y); octx.lineTo(a.el.cx + vx * sc, a.el.cy + vy * sc); octx.stroke();
+    }
+    octx.fillStyle = on ? "#ffd23f" : "#f6f1ff"; octx.beginPath(); octx.arc(a.x, a.y, 2.8, 0, Math.PI * 2); octx.fill();
+    a.el.style.transform = `translate(${a.el.cx}px, ${a.el.cy}px) translate(-50%, -50%)`;
+    a.el.classList.toggle("on", on);
+  }
+}
+function drawOverlay(now, hoverPart) {
+  octx.setTransform(DPR, 0, 0, DPR, 0, 0); octx.clearRect(0, 0, W, H);
+  if (showTags) layoutTags(hoverPart);
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const r = ripples[i], t = (now - r.t) / 650; if (t >= 1) { ripples.splice(i, 1); continue; }
+    octx.strokeStyle = `rgba(255,210,63,${1 - t})`; octx.lineWidth = 3;
+    octx.beginPath(); octx.arc(r.x, r.y, 10 + t * 46, 0, Math.PI * 2); octx.stroke();
+  }
+  const aiView = document.body.classList.contains("ai-view");
+  for (const h of hands.values()) {
+    const P = h.pts; if (!P.length) continue;
+    octx.lineCap = "round"; octx.lineWidth = aiView ? 3.5 : 2.5; octx.strokeStyle = rgba(h.color, aiView ? 0.95 : 0.75);
+    octx.beginPath(); for (const [a, b] of LINKS) { octx.moveTo(P[a][0], P[a][1]); octx.lineTo(P[b][0], P[b][1]); } octx.stroke();
+    P.forEach((p, i) => {
+      const tip = i === 4 || i === 8;
+      octx.beginPath(); octx.arc(p[0], p[1], tip ? 6 : 3.6, 0, Math.PI * 2);
+      octx.fillStyle = tip ? rgba(h.color, 1) : "#ffffff"; octx.fill();
+      octx.lineWidth = 1.5; octx.strokeStyle = rgba(h.color, 1); octx.stroke();
+      if (aiView) { octx.font = '500 10px "IBM Plex Mono", monospace'; octx.fillStyle = "rgba(246,241,255,.8)"; octx.fillText(i, p[0] + 7, p[1] - 6); }
+    });
+    octx.font = '500 12px "IBM Plex Mono", monospace'; octx.fillStyle = rgba(h.color, 1);
+    octx.fillText(`MÃO ${Math.round(h.score * 100)}%${h.pinch ? " · PINÇA" : ""}`, P[0][0] + 14, P[0][1] + 22);
+    const r = h.pinch ? 12 : 22;
+    octx.beginPath(); octx.arc(h.sx, h.sy, r, 0, Math.PI * 2);
+    octx.lineWidth = 3; octx.strokeStyle = h.pinch ? "#ffd23f" : rgba(h.color, .9); octx.stroke();
+    if (h.pinch) { octx.fillStyle = "rgba(255,210,63,.45)"; octx.fill(); }
+  }
+  if (duo) {
+    const [a, b] = [...grabs.values()];
+    if (a && b) { octx.strokeStyle = "rgba(255,210,63,.7)"; octx.setLineDash([6, 6]); octx.lineWidth = 2; octx.beginPath(); octx.moveTo(a.x, a.y); octx.lineTo(b.x, b.y); octx.stroke(); octx.setLineDash([]); }
+  }
+}
+
+/* ---------- Loop ---------- */
+let prev = performance.now(), idleBlend = 0, uiT = 0, lastAuto = performance.now();
+let shownPart = null, shownUntil = 0;
+function setInfo(part) {
+  const info = $("#info");
+  if (part) { setTxt("#iName", PARTS[part].name); setTxt("#iDesc", PARTS[part].desc); info.classList.add("active"); }
+  else { setTxt("#iName", "Aponte para uma parte"); setTxt("#iDesc", "Passe a mão ou o mouse sobre o modelo para ver o nome e a função de cada estrutura."); info.classList.remove("active"); }
+}
+function loop(now) {
+  const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
+  scene.updateMatrixWorld();
+  cutPlane.copy(cutLocal).applyMatrix4(inner.matrixWorld);
+
+  if (landmarker && video.readyState >= 2 && video.currentTime !== lastVT) {
+    lastVT = video.currentTime;
+    try { processHands(landmarker.detectForVideo(video, now), now); detCount++; } catch (e) { console.warn(e); }
+  }
+  if (now - detT0 > 1000) { detFps = detCount * 1000 / (now - detT0); detCount = 0; detT0 = now; }
+
+  const idle = grabs.size === 0 && hands.size === 0 && now - lastActivity > 6000;
+  document.body.classList.toggle("idle", idle);
+  idleBlend += ((idle ? 1 : 0) - idleBlend) * Math.min(1, dt * 1.5);
+  if (idleBlend > 0.01) { orbit(16 * dt * idleBlend, 0); zoomTarget += (1 - zoomTarget) * dt * 0.4 * idleBlend; }
+  if (grabs.size === 0 && Math.abs(spin.x) + Math.abs(spin.y) > 0.05) {
+    orbit(spin.x * dt * 60, spin.y * dt * 60); const k = Math.pow(0.9, dt * 60); spin.x *= k; spin.y *= k;
+  }
+  zoom += (zoomTarget - zoom) * Math.min(1, dt * 10);
+  pivot.scale.setScalar(zoom);
+  pivot.position.y = Math.sin(now / 1000 * 0.9) * 0.12 * idleBlend;
+  dust.rotation.y += dt * 0.01;
+
+  if (idle && !flow && now - lastAuto > 7000 && now - lastFlowEnd > 2500) {
+    lastAuto = now;
+    (alt++ % 2 ? startUrine : startSperm)(false);
+    lastActivity = now - 6000;
+  }
+
+  if (flow) { const e = (now - flow.t0) / 1000; while (flow && flow.events.length && e >= flow.events[0].t) flow.events.shift().fn(); }
+  updateSparks(now);
+  updateNT(dt);
+  fill += (fillTarget - fill) * Math.min(1, dt * 2.2);
+  bladder.scale.set(1 + 0.1 * fill, 1 + 0.14 * fill, 1 + 0.1 * fill);
+
+  // parte apontada
+  let hp = null;
+  for (const h of hands.values()) if (!h.pinch && h.sx !== null) { const p = pick(h.sx, h.sy); if (p) { hp = p.part; break; } }
+  if (!hp) for (const g of grabs.values()) if (g.hit && !g.moved) { hp = g.hit.part; break; }
+  if (!hp && mouse && grabs.size === 0) { const p = pick(mouse.x, mouse.y); if (p) hp = p.part; }
+  if (hp) { shownPart = hp; shownUntil = now + 1500; }
+  else if (now > shownUntil) shownPart = now < selUntil ? selPart : null;
+  for (const key in mats) {
+    const u = mats[key].uniforms;
+    partGlow[key] = (partGlow[key] || 0) * Math.pow(0.955, dt * 60);
+    u.uGlow.value = partGlow[key] + (key === "bexiga" ? fill * 0.25 : 0);
+    u.uHover.value += ((key === hp ? 1 : 0) - u.uHover.value) * Math.min(1, dt * 12);
+  }
+  glCanvas.style.cursor = grabs.size ? "grabbing" : (hp ? "pointer" : "grab");
+
+  // botões sob a mão
+  const hovered = new Set();
+  for (const h of hands.values()) { if (h.sx === null) continue; const el = document.elementFromPoint(h.sx, h.sy); const b = el && el.closest && el.closest("button"); if (b) hovered.add(b); }
+  document.querySelectorAll(".btn").forEach(b => b.classList.toggle("hand-hover", hovered.has(b)));
+
+  renderer.render(scene, camera);
+  drawOverlay(now, shownPart);
+
+  if (now - uiT > 120) {
+    uiT = now;
+    setInfo(shownPart);
+    setTxt("#vHands", hands.size); setTxt("#vPts", hands.size * 21);
+    setTxt("#vFps", landmarker ? Math.round(detFps) : "–");
+    let gest = "–";
+    if (duo) gest = "duas pinças · zoom";
+    else if ([...grabs.values()].some(g => g.moved)) gest = "pinça · girando";
+    else if ([...hands.values()].some(h => h.pinch)) gest = "pinça";
+    else if (hands.size) gest = "mão aberta";
+    setTxt("#vGesture", gest);
+  }
+  requestAnimationFrame(loop);
+}
+addEventListener("resize", fit);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { for (const k in tagEls) tagEls[k].w = 0; });
+renderRoute("sperm");
+fit();
+requestAnimationFrame(loop);
+initCamera();
+setTimeout(() => { lastAuto = performance.now(); startSperm(false); }, 1600);
+</script>
+
+</body>
+</html>
